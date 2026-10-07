@@ -153,9 +153,16 @@ function generate() {
     if ($('occlude').checked) {
       const mountainMask = grammar.getMountainMask();
       if (mountainMask) {
-        const sunMask = `<mask id="sunOcclusion" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/><rect x="0" y="0" width="1024" height="512" fill="black" mask="url(#${mountainMask})"/></mask>`;
-        currentSvg = currentSvg.replace('</defs>', `${sunMask}</defs>`);
-        currentSvg = currentSvg.replace(/<circle /g, '<circle mask="url(#sunOcclusion)" ');
+        // Use the actual path geometry from the selected cumulative mountain
+        // mask instead of nesting one SVG mask inside another. This is much
+        // more reliable across browsers.
+        const maskPattern = new RegExp(`<mask\\s+id="${mountainMask}">([\\s\\S]*?)</mask>`);
+        const maskMatch = currentSvg.match(maskPattern);
+        if (maskMatch) {
+          const sunMask = `<mask id="sunOcclusion" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/><g>${maskMatch[1]}</g></mask>`;
+          currentSvg = currentSvg.replace('</defs>', `${sunMask}</defs>`);
+          currentSvg = currentSvg.replace(/<circle /g, '<circle mask="url(#sunOcclusion)" ');
+        }
       }
     }
 
