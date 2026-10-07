@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v21 07-OCT-2026 20:44
+//app.js v22 07-OCT-2026 20:58
 
 const $ = id => document.getElementById(id);
 
@@ -151,23 +151,22 @@ function ensureGalaxyToggle() {
 }
 
 function addGalaxyArm(svg, rng, force = false) {
-  // Prototype galactic arm: this is a separate diffuse SVG object rather than
-  // a special arrangement of ordinary stars. It is intentionally rare unless
-  // the test toggle forces it on.
+  // Galactic-arm prototype: a broad, irregular diffuse band rather than a
+  // single clean stroke. It is still a separate celestial object, so the
+  // existing mountain/body occlusion system can treat it as one thing.
   if (!force && rng() >= 0.03) return svg;
 
   const colors = ['white', 'grey', 'cyan', 'yellow', 'purple', 'orange', 'red', 'blue'];
   const color = colors[Math.floor(rng() * colors.length)];
-  const accent = colors[Math.floor(rng() * colors.length)];
+  const warm = colors[Math.floor(rng() * colors.length)];
   const angle = Math.floor(rng() * 360);
-  const centerX = Math.floor(rng() * 700 + 160);
-  const centerY = Math.floor(rng() * 130 + 70);
-  const length = Math.floor(rng() * 260 + 620);
+  const centerX = Math.floor(rng() * 600 + 210);
+  const centerY = Math.floor(rng() * 120 + 95);
+  const length = Math.floor(rng() * 280 + 700);
   const bend = Math.floor(rng() * 180 - 90);
-  const width = Math.floor(rng() * 45 + 55);
-  const opacity = (rng() * 0.10 + 0.08).toFixed(2);
-  const accentOpacity = (rng() * 0.08 + 0.04).toFixed(2);
-  const blur = (rng() * 7 + 3).toFixed(1);
+  const width = Math.floor(rng() * 70 + 105);
+  const opacity = (rng() * 0.07 + 0.07).toFixed(3);
+  const blur = (rng() * 12 + 10).toFixed(1);
 
   const startX = centerX - length / 2;
   const endX = centerX + length / 2;
@@ -175,39 +174,87 @@ function addGalaxyArm(svg, rng, force = false) {
   const control2X = endX - length * 0.28;
   const control1Y = centerY - bend;
   const control2Y = centerY + bend;
-  const path = `M ${startX.toFixed(1)} ${centerY.toFixed(1)} C ${control1X.toFixed(1)} ${control1Y.toFixed(1)}, ${control2X.toFixed(1)} ${control2Y.toFixed(1)}, ${endX.toFixed(1)} ${centerY.toFixed(1)}`;
+  const basePath = `M ${startX.toFixed(1)} ${centerY.toFixed(1)} C ${control1X.toFixed(1)} ${control1Y.toFixed(1)}, ${control2X.toFixed(1)} ${control2Y.toFixed(1)}, ${endX.toFixed(1)} ${centerY.toFixed(1)}`;
+
+  // Several related paths create the irregular, cloud-like width of a real
+  // diffuse band. Keep the opacity low so it reads as atmospheric light.
+  const layers = [];
+  const layerCount = 4 + Math.floor(rng() * 3);
+  for (let i = 0; i < layerCount; i++) {
+    const offset = (i - (layerCount - 1) / 2) * (width * 0.18) + (rng() * 18 - 9);
+    const localBend = bend + (rng() * 70 - 35);
+    const y1 = centerY + offset;
+    const y2 = centerY + offset * 0.35;
+    const c1y = y1 - localBend;
+    const c2y = y2 + localBend;
+    const d = `M ${startX.toFixed(1)} ${y1.toFixed(1)} C ${control1X.toFixed(1)} ${c1y.toFixed(1)}, ${control2X.toFixed(1)} ${c2y.toFixed(1)}, ${endX.toFixed(1)} ${y2.toFixed(1)}`;
+    const strokeWidth = Math.floor(width * (0.45 + rng() * 0.65));
+    const layerOpacity = (opacity * (0.45 + rng() * 0.75)).toFixed(3);
+    layers.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" opacity="${layerOpacity}" filter="url(#galaxyBlur)"/>`);
+  }
+
+  // Bright knots break up the otherwise smooth ribbon and give the band some
+  // depth without turning it into an ordinary star field.
+  const knots = [];
+  const knotCount = 10 + Math.floor(rng() * 11);
+  for (let i = 0; i < knotCount; i++) {
+    const t = 0.08 + rng() * 0.84;
+    const x = startX + length * t;
+    const curve = Math.sin(t * Math.PI) * bend * 0.75;
+    const y = centerY + curve + (rng() * width * 0.65 - width * 0.325);
+    const rx = Math.floor(rng() * 55 + 20);
+    const ry = Math.floor(rng() * 28 + 10);
+    const knotOpacity = (rng() * 0.07 + 0.025).toFixed(3);
+    const rot = Math.floor(rng() * 180 - 90);
+    knots.push(`<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${rx}" ry="${ry}" fill="${warm}" opacity="${knotOpacity}" transform="rotate(${rot} ${x.toFixed(1)} ${y.toFixed(1)})" filter="url(#galaxySoft)"/>`);
+  }
+
+  // A few translucent dark lanes create the mottled/dusty gaps seen in broad
+  // galactic bands. They remain part of the same celestial object.
+  const dust = [];
+  const dustCount = 2 + Math.floor(rng() * 3);
+  for (let i = 0; i < dustCount; i++) {
+    const t = 0.18 + rng() * 0.64;
+    const x = startX + length * t;
+    const y = centerY + Math.sin(t * Math.PI) * bend * 0.75 + (rng() * width * 0.5 - width * 0.25);
+    const rx = Math.floor(rng() * 85 + 45);
+    const ry = Math.floor(rng() * 14 + 8);
+    const dustOpacity = (rng() * 0.06 + 0.025).toFixed(3);
+    const rot = Math.floor(rng() * 180 - 90);
+    dust.push(`<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${rx}" ry="${ry}" fill="black" opacity="${dustOpacity}" transform="rotate(${rot} ${x.toFixed(1)} ${y.toFixed(1)})" filter="url(#galaxySoft)"/>`);
+  }
 
   const arm = `
     <g data-celestial-body="galaxy-arm" mask="url(#sunOcclusion)">
       <g transform="rotate(${angle} ${centerX} ${centerY})">
-      <path d="${path}" fill="none" stroke="${color}"
-            stroke-width="${width}" stroke-linecap="round"
-            opacity="${opacity}" filter="url(#galaxyBlur)"/>
-      <path d="${path}" fill="none" stroke="${accent}"
-            stroke-width="${Math.max(8, Math.floor(width * 0.35))}"
-            stroke-linecap="round" opacity="${accentOpacity}"/>
+        <path d="${basePath}" fill="none" stroke="${color}" stroke-width="${width * 1.35}" stroke-linecap="round" opacity="${(opacity * 0.7).toFixed(3)}" filter="url(#galaxyBlur)"/>
+        ${layers.join('')}
+        ${knots.join('')}
+        ${dust.join('')}
       </g>
     </g>`;
 
-  const defs = `<filter id="galaxyBlur" x="-30%" y="-100%" width="160%" height="300%"><feGaussianBlur stdDeviation="${blur}"/></filter>`;
+  const defs = `
+    <filter id="galaxyBlur" x="-30%" y="-150%" width="160%" height="400%">
+      <feGaussianBlur stdDeviation="${blur}"/>
+    </filter>
+    <filter id="galaxySoft" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="${(blur * 0.7).toFixed(1)}"/>
+    </filter>`;
   svg = svg.replace('</defs>', `${defs}</defs>`);
 
   // Insert the galaxy into the rendered SVG body, before the first mountain
-  // layer. Do not use the first <circle> as an anchor: masks/definitions and
-  // other generated content can contain circles before the visible scene.
-  // This keeps the galaxy out of <defs> while placing it behind the mountains
-  // and the foreground celestial bodies.
+  // layer. This keeps it behind the mountains while the celestial-body mask
+  // keeps it behind suns, moons, and planets.
   const mountainMatch = svg.match(/<rect[^>]*mask="url\(#overlay\d+\)"[^>]*>/);
   if (mountainMatch && mountainMatch.index != null) {
     return svg.slice(0, mountainMatch.index) + arm + svg.slice(mountainMatch.index);
   }
 
-  // Fallback: insert immediately after the opening SVG tag, still outside defs.
   const svgOpen = svg.indexOf('>');
   if (svgOpen >= 0) return svg.slice(0, svgOpen + 1) + arm + svg.slice(svgOpen + 1);
   return svg.replace('</svg>', `${arm}</svg>`);
 }
-
 function addStars(svg, rng) {
   // Experimental star field: zero or one field, independent of the grammar RNG.
   if (rng() >= 0.35) return svg;
