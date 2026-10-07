@@ -70,7 +70,7 @@ function makeGrammar(seed, occlude) {
     }
     const rule = rules[Math.floor(rng() * rules.length)];
     if (occlude && symbol === 'mountains') {
-      const masks = [...String(rule).matchAll(/mask=\"url\\\(#(overlay\d+)\\\)\"/g)];
+      const masks = [...String(rule).matchAll(/mask="url\(#(overlay\d+)\)"/g)];
       if (masks.length) mountainMask = masks[masks.length - 1][1];
     }
     return expandText(String(rule), { ...state }, depth + 1);
