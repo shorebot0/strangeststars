@@ -2,6 +2,8 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
+//app.js v6 07-OCT-2026 13:17
+
 const $ = id => document.getElementById(id);
 
 function setStatus(message) { $('status').textContent = message; }
