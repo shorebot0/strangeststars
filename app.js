@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v6 07-OCT-2026 13:17
+//app.js v7 07-OCT-2026 13:24
 
 const $ = id => document.getElementById(id);
 
@@ -153,16 +153,23 @@ function generate() {
     // exact cumulative mask belonging to the selected mountain stack to mask
     // the suns themselves, preserving the original mountain appearance.
     if ($('occlude').checked) {
-      const mountainMask = grammar.getMountainMask();
+      // Do not depend on the expander remembering which mountain rule was chosen.
+      // The generated SVG itself is the authoritative source: find the highest
+      // overlay mask actually used by the mountain rectangles.
+      const mountainMaskIds = [...currentSvg.matchAll(/<rect[^>]*mask="url\(#(overlay\d+)\)"/g)]
+        .map(match => match[1]);
+      const mountainMask = mountainMaskIds.length
+        ? mountainMaskIds[mountainMaskIds.length - 1]
+        : null;
+
       if (mountainMask) {
-        // Use the actual path geometry from the selected cumulative mountain
-        // mask instead of nesting one SVG mask inside another. This is much
-        // more reliable across browsers.
+        // Copy the actual cumulative mountain geometry and invert it for the
+        // sun mask: white = sun visible, black = sun hidden.
         const maskPattern = new RegExp(`<mask\\s+id="${mountainMask}">([\\s\\S]*?)</mask>`);
         const maskMatch = currentSvg.match(maskPattern);
         if (maskMatch) {
           const mountainShape = maskMatch[1].replace(/fill="white"/g, 'fill="black"');
-          const sunMask = `<mask id="sunOcclusion" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/><g>${mountainShape}</g></mask>`;
+          const sunMask = `<mask id="sunOcclusion" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/>${mountainShape}</mask>`;
           currentSvg = currentSvg.replace('</defs>', `${sunMask}</defs>`);
           currentSvg = currentSvg.replace(/<circle /g, '<circle mask="url(#sunOcclusion)" ');
         }
