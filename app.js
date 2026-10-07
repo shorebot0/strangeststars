@@ -2,11 +2,41 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v26 07-OCT-2026 21:38
+//app.js v27 07-OCT-2026 22:14
 
 const $ = id => document.getElementById(id);
 
 function setStatus(message) { $('status').textContent = message; }
+
+
+async function updateVersionInfo() {
+  const appMatch = document.body.innerHTML.match(/app\.js v(\d+)/i);
+  const appVersion = appMatch ? `v${appMatch[1]}` : 'unknown';
+
+  async function readVersion(url, pattern) {
+    try {
+      const response = await fetch(url, { cache: 'no-cache' });
+      if (!response.ok) return 'unknown';
+      const text = await response.text();
+      const match = text.match(pattern);
+      return match ? `v${match[1]}` : 'unknown';
+    } catch (error) {
+      console.warn(`Could not read version metadata from ${url}:`, error);
+      return 'unknown';
+    }
+  }
+
+  const [cssVersion, indexVersion] = await Promise.all([
+    readVersion('style.css', /Strangest Stars CSS v(\d+)/i),
+    readVersion('index.html', /Strangest Stars INDEX v(\d+)/i)
+  ]);
+
+  const versionInfo = $('versionInfo');
+  if (versionInfo) {
+    versionInfo.textContent = `CSS ${cssVersion} • INDEX ${indexVersion} • APP ${appVersion}`;
+  }
+}
+
 
 // Small deterministic RNG. Tracery supports injecting its own RNG.
 function splitmix32(seed) {
@@ -775,6 +805,7 @@ $('seed').addEventListener('keydown', event => { if (event.key === 'Enter') gene
 
 (async function init() {
   try {
+    await updateVersionInfo();
     await loadGrammar();
     ensureGalaxyToggle();
     ensureEclipseToggle();
