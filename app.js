@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v10 07-OCT-2026 17:09
+//app.js v10 07-OCT-2026 17:25
 
 const $ = id => document.getElementById(id);
 
@@ -149,13 +149,13 @@ function addMoon(svg, rng) {
   const fill = colors[Math.floor(rng() * colors.length)];
   const opacity = (rng() * 0.12 + 0.08).toFixed(2);
 
-  const moon = `<circle mask="url(#sunOcclusion)" cx="${cx}" cy="${cy}" r="${radius}" fill="${fill}" opacity="${opacity}"/>`;
+  const moon = `<g data-celestial-body="moon" mask="url(#sunOcclusion)"><circle cx="${cx}" cy="${cy}" r="${radius}" fill="${fill}" opacity="${opacity}"/></g>`;
 
   return svg.replace('</svg>', `${moon}</svg>`);
 }
 
 function addRingedPlanet(svg, rng) {
-  // Ringed planet: zero or one, independent of the grammar RNG.
+  // First-pass ringed planet: zero or one, independent of the grammar RNG.
   if (rng() >= 0.18) return svg;
 
   const cx = Math.floor(rng() * 900 + 60);
@@ -169,29 +169,108 @@ function addRingedPlanet(svg, rng) {
   const rx = Math.floor(radius * (1.7 + rng() * 0.9));
   const ry = Math.floor(radius * (0.28 + rng() * 0.18));
   const rotation = Math.floor(rng() * 160 - 80);
-  const strokeWidth = Math.max(2, Math.floor(radius * 0.10));
-  const leftX = (cx - rx).toFixed(2);
-  const rightX = (cx + rx).toFixed(2);
-  const centerY = cy.toFixed(2);
 
-  // Draw the complete ring behind the planet, then redraw its front half over
-  // the planet. In SVG's coordinate system, the sweep=1 arc is the lower/front
-  // half of the rotated ellipse.
-  const ringBack = `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none"
-               stroke="${ringColor}" stroke-width="${strokeWidth}"
-               opacity="${ringOpacity}" transform="rotate(${rotation} ${cx} ${cy})"/>`;
-  const ringFront = `<path d="M ${rightX} ${centerY} A ${rx} ${ry} ${rotation} 0 1 ${leftX} ${centerY}"
-               fill="none" stroke="${ringColor}" stroke-width="${strokeWidth}"
-               stroke-linecap="round" opacity="${ringOpacity}"/>`;
-
+  // Keep the existing ring-behind-planet behavior for now. The only v10
+  // change is celestial-body overlap: this whole body is treated as one
+  // occluding object when it is in front of another body.
   const planet = `
-    <g mask="url(#sunOcclusion)" opacity="${opacity}">
-      ${ringBack}
-      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${planetColor}"/>
-      ${ringFront}
+    <g data-celestial-body="ringed-planet" mask="url(#sunOcclusion)" opacity="${opacity}">
+      <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none"
+               stroke="${ringColor}" stroke-width="${Math.max(2, Math.floor(radius * 0.10))}"
+               opacity="${ringOpacity}" transform="rotate(${rotation} ${cx} ${cy})"/>
+      <circle data-celestial-silhouette="true" cx="${cx}" cy="${cy}" r="${radius}" fill="${planetColor}"/>
     </g>`;
 
   return svg.replace('</svg>', `${planet}</svg>`);
+}
+
+// Give every celestial body a depth order without changing its appearance.
+// Later bodies are in front. Earlier bodies are masked wherever a later body
+// overlaps them, preventing translucent bodies from compositing like a Venn
+// diagram. The ringed planet's solid planet disk is its occluding silhouette;
+// its decorative ring is not treated as solid.
+function applyCelestialOverlapOcclusion(svg) {
+  const circleRe = /<circle\s+mask="url\(#sunOcclusion\)"\s+([^>]*?)(?:\s*\/)>/g;
+  const bodies = [];
+  let match;
+  while ((match = circleRe.exec(svg)) !== null) {
+    const attrs = match[1];
+    const cx = attrs.match(/\bcx="([^"]+)"/);
+    const cy = attrs.match(/\bcy="([^"]+)"/);
+    const r = attrs.match(/\br="([^"]+)"/);
+    if (cx && cy && r) {
+      bodies.push({ type: 'circle', cx: cx[1], cy: cy[1], r: r[1], start: match.index, end: circleRe.lastIndex });
+    }
+  }
+
+  // Moon and ringed-planet circles are nested in their own tagged groups, so
+  // the plain sun-circle regex above intentionally only catches the original
+  // grammar suns. Find tagged bodies separately in document order.
+  const taggedRe = /<g\s+data-celestial-body="([^"]+)"[^>]*>([\s\S]*?)<\/g>/g;
+  const tagged = [];
+  while ((match = taggedRe.exec(svg)) !== null) {
+    const type = match[1];
+    const bodyText = match[2];
+    if (type === 'moon') {
+      const c = bodyText.match(/<circle\s+cx="([^"]+)"\s+cy="([^"]+)"\s+r="([^"]+)"/);
+      if (c) tagged.push({ type, cx: c[1], cy: c[2], r: c[3], start: match.index, end: taggedRe.lastIndex });
+    } else if (type === 'ringed-planet') {
+      const c = bodyText.match(/<circle\s+data-celestial-silhouette="true"\s+cx="([^"]+)"\s+cy="([^"]+)"\s+r="([^"]+)"/);
+      if (c) tagged.push({ type, cx: c[1], cy: c[2], r: c[3], start: match.index, end: taggedRe.lastIndex });
+    }
+  }
+
+  // Reconstruct the body list in SVG document order. The original suns are
+  // emitted before the optional moon/planet, so source order is the depth order.
+  const all = [
+    ...bodies.map(b => ({ ...b, kind: 'sun' })),
+    ...tagged
+  ].sort((a, b) => a.start - b.start);
+
+  if (all.length < 2) return svg;
+
+  const masks = [];
+  const replacements = [];
+
+  for (let i = 0; i < all.length - 1; i++) {
+    const maskId = `celestialOverlap${i}`;
+    const occluders = all.slice(i + 1).map(body =>
+      `<circle cx="${body.cx}" cy="${body.cy}" r="${body.r}" fill="black"/>`
+    ).join('');
+    masks.push(`<mask id="${maskId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/>${occluders}</mask>`);
+  }
+
+  // Wrap original sun circles so their existing mountain mask is preserved,
+  // while the new overlap mask is applied at the body level.
+  for (let i = 0; i < all.length - 1; i++) {
+    const body = all[i];
+    if (body.kind === 'sun') {
+      const original = svg.slice(body.start, body.end);
+      const clean = original.replace(' mask="url(#sunOcclusion)"', '');
+      replacements.push({ start: body.start, end: body.end, text: `<g mask="url(#sunOcclusion)" data-celestial-body="sun" data-overlap-mask="celestialOverlap${i}"><g mask="url(#celestialOverlap${i})">${clean}</g></g>` });
+    }
+  }
+
+  // Add overlap masks to optional tagged bodies without changing their content.
+  for (let i = 0; i < all.length - 1; i++) {
+    const body = all[i];
+    if (body.kind !== 'sun') {
+      const original = svg.slice(body.start, body.end);
+      const taggedOpen = original.match(/^<g\s+data-celestial-body="[^"]+"[^>]*>/);
+      if (taggedOpen) {
+        const replacementOpen = `<g mask="url(#celestialOverlap${i})" data-celestial-overlap="true">`;
+        const wrapped = `${replacementOpen}${original}</g>`;
+        replacements.push({ start: body.start, end: body.end, text: wrapped });
+      }
+    }
+  }
+
+  replacements.sort((a, b) => b.start - a.start);
+  for (const replacement of replacements) {
+    svg = svg.slice(0, replacement.start) + replacement.text + svg.slice(replacement.end);
+  }
+
+  return svg.replace('</defs>', `${masks.join('')}</defs>`);
 }
 
 function generate() {
@@ -238,25 +317,12 @@ function generate() {
       }
     }
 
-    // Keep all celestial bodies in the same top-level rendering layer. The
-    // original suns are generated before the translucent mountain rectangles,
-    // so move those already-masked circles to the end of the SVG. They still
-    // use the exact mountain occlusion mask, but their rendering order is now
-    // unambiguous: mountains first, celestial bodies second.
-    if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
-      const suns = currentSvg.match(/<circle mask="url\(#sunOcclusion\)"[^>]*\/>/g) || [];
-      if (suns.length) {
-        currentSvg = currentSvg.replace(/<circle mask="url\(#sunOcclusion\)"[^>]*\/>/g, '');
-        currentSvg = currentSvg.replace('</svg>', `${suns.join('')}</svg>`);
-      }
-    }
-
-    // Add the experimental celestial bodies after the mountain layers and
-    // after the original suns have been moved into that same celestial layer.
-    // The moon and ringed planet use the same mountain occlusion mask.
+    // Add the first experimental celestial body after the existing sun/mountain
+    // processing. The moon uses the same occlusion mask as the suns.
     if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
       currentSvg = addMoon(currentSvg, celestialRng);
       currentSvg = addRingedPlanet(currentSvg, planetRng);
+      currentSvg = applyCelestialOverlapOcclusion(currentSvg);
     }
 
     // Strip the wrapper text used by the original Tracery grammar.
