@@ -12,7 +12,7 @@ function splitmix32(seed) {
     seed |= 0;
     seed = seed + 0x9e3779b9 | 0;
     let t = seed ^ seed >>> 16;
-    t = Math.imul(t, 0x21f0a2ad);
+    t = Math.imul(t, 0x21f0aaad);
     t = t ^ t >>> 15;
     t = Math.imul(t, 0x735a2d97);
     return ((t = t ^ t >>> 15) >>> 0) / 4294967296;
@@ -39,6 +39,14 @@ async function loadGrammar() {
   sourceGrammar = await response.json();
 }
 
+// The original project used Tracery. GitHub Pages should not depend on a
+// third-party CDN being reachable, so this small embedded expander implements
+// the subset of Tracery syntax used by the Strangest Stars grammar:
+//   #symbol#          expand a rule
+//   [name:value]      assign a local rule variable
+//   \#                 literal # (used by SVG url(#id) values)
+// This keeps the original grammar JSON intact while making the site fully
+// self-contained.
 function makeGrammar(seed, occlude) {
   const grammarData = structuredClone(sourceGrammar);
   if (occlude) {
@@ -46,13 +54,81 @@ function makeGrammar(seed, occlude) {
     // New:      bg -> suns -> mountains -> clouds.
     grammarData.origin2 = ['#preface# #defs# #bg# #sun# #sun# #mountains# #clouds# #ending#'];
   }
-  tracery.setRng(splitmix32(seed));
-  const grammar = tracery.createGrammar(grammarData);
-  return grammar;
+
+  const rng = splitmix32(seed);
+
+  function choose(symbol, state, depth) {
+    if (depth > 200) throw new Error('Grammar expansion exceeded the safety limit.');
+    if (Object.prototype.hasOwnProperty.call(state, symbol)) {
+      return expandText(String(state[symbol]), state, depth + 1);
+    }
+    let rules = grammarData[symbol];
+    if (typeof rules === 'string') rules = [rules];
+    if (!Array.isArray(rules) || rules.length === 0) {
+      throw new Error(`Unknown grammar symbol: ${symbol}`);
+    }
+    const rule = rules[Math.floor(rng() * rules.length)];
+    return expandText(String(rule), { ...state }, depth + 1);
+  }
+
+  function readBracket(text, start) {
+    let depth = 0;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '\\' && text[i + 1] === ']') { i++; continue; }
+      if (ch === '[') depth++;
+      else if (ch === ']') {
+        depth--;
+        if (depth === 0) return [text.slice(start + 1, i), i + 1];
+      }
+    }
+    return null;
+  }
+
+  function expandText(text, state, depth) {
+    let out = '';
+    for (let i = 0; i < text.length;) {
+      if (text[i] === '\\' && text[i + 1] === '#') {
+        out += '#';
+        i += 2;
+        continue;
+      }
+
+      if (text[i] === '[') {
+        const bracket = readBracket(text, i);
+        if (bracket) {
+          const [contents, next] = bracket;
+          const colon = contents.indexOf(':');
+          if (colon > 0) {
+            const key = contents.slice(0, colon).trim();
+            const value = contents.slice(colon + 1);
+            state[key] = expandText(value, state, depth + 1);
+            i = next;
+            continue;
+          }
+        }
+      }
+
+      if (text[i] === '#') {
+        const end = text.indexOf('#', i + 1);
+        if (end !== -1) {
+          const symbol = text.slice(i + 1, end);
+          out += choose(symbol, state, depth + 1);
+          i = end + 1;
+          continue;
+        }
+      }
+
+      out += text[i++];
+    }
+    return out;
+  }
+
+  return { flatten: expression => choose(expression.replace(/^#|#$/g, ''), {}, 0) };
 }
 
 function generate() {
-  if (!sourceGrammar || !window.tracery) return;
+  if (!sourceGrammar) return;
   const seedText = $('seed').value;
   currentSeed = numericSeed(seedText);
   $('seed').value = String(currentSeed);
@@ -111,7 +187,7 @@ $('downloadSvg').addEventListener('click', downloadSvg);
 $('downloadPng').addEventListener('click', downloadPng);
 $('seed').addEventListener('keydown', event => { if (event.key === 'Enter') generate(); });
 
-window.addEventListener('tracery-ready', async () => {
+(async function init() {
   try {
     await loadGrammar();
     setStatus('Ready.');
@@ -120,4 +196,4 @@ window.addEventListener('tracery-ready', async () => {
     console.error(error);
     setStatus(`Could not load grammar: ${error.message}`);
   }
-});
+})();

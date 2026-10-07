@@ -72,20 +72,6 @@
     <span>SVG-first • deterministic seeds</span>
   </footer>
 
-  <script>
-    // Load Tracery from a CDN. The site remains a plain static GitHub Pages app.
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/tracery-grammar@2.8.4/lib/tracery.js';
-    script.onload = () => window.dispatchEvent(new Event('tracery-ready'));
-    script.onerror = () => {
-      const fallback = document.createElement('script');
-      fallback.src = 'https://raw.githubusercontent.com/v21/tracery/master/tracery.js';
-      fallback.onload = () => window.dispatchEvent(new Event('tracery-ready'));
-      fallback.onerror = () => setStatus('Could not load Tracery. Check your connection.');
-      document.head.appendChild(fallback);
-    };
-    document.head.appendChild(script);
-  </script>
   <script src="app.js"></script>
 </body>
 </html>
