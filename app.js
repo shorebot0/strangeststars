@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v17 07-OCT-2026 19:25
+//app.js v18 07-OCT-2026 19:36
 
 const $ = id => document.getElementById(id);
 
@@ -348,6 +348,46 @@ function applyGalaxyBodyOcclusion(svg) {
   return svg;
 }
 
+
+function applyStarBodyOcclusion(svg) {
+  // Ordinary stars are a background sky layer. Because celestial bodies are
+  // translucent, stars would otherwise remain visible through them. Mask the
+  // star field beneath every solid celestial-body silhouette while preserving
+  // the existing mountain mask on the star group.
+  const bodies = [];
+  let match;
+
+  const sunRe = /<circle\s+mask="url\(#sunOcclusion\)"\s+([^>]*?)(?:\s*\/>)/g;
+  while ((match = sunRe.exec(svg)) !== null) {
+    const attrs = match[1];
+    const cx = attrs.match(/\bcx="([^"]+)"/);
+    const cy = attrs.match(/\bcy="([^"]+)"/);
+    const r = attrs.match(/\br="([^"]+)"/);
+    if (cx && cy && r) bodies.push({ cx: cx[1], cy: cy[1], r: r[1] });
+  }
+
+  const silhouetteRe = /<circle\s+data-celestial-silhouette="true"\s+cx="([^"]+)"\s+cy="([^"]+)"\s+r="([^"]+)"/g;
+  while ((match = silhouetteRe.exec(svg)) !== null) {
+    bodies.push({ cx: match[1], cy: match[2], r: match[3] });
+  }
+
+  if (!bodies.length) return svg;
+
+  const occluders = bodies.map(body =>
+    `<circle cx="${body.cx}" cy="${body.cy}" r="${body.r}" fill="black"/>`
+  ).join('');
+  const maskId = 'starBodyOcclusion';
+  const mask = `<mask id="${maskId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/>${occluders}</mask>`;
+  svg = svg.replace('</defs>', `${mask}</defs>`);
+
+  const starRe = /<g\s+data-celestial-body="stars"\s+mask="url\(#sunOcclusion\)">([\s\S]*?)<\/g>/;
+  const starMatch = svg.match(starRe);
+  if (!starMatch) return svg;
+
+  const replacement = `<g data-celestial-body="stars" mask="url(#sunOcclusion)"><g mask="url(#${maskId})">${starMatch[1]}</g></g>`;
+  return svg.replace(starMatch[0], replacement);
+}
+
 function applyCelestialOverlapOcclusion(svg) {
   const circleRe = /<circle\s+mask="url\(#sunOcclusion\)"\s+([^>]*?)(?:\s*\/)>/g;
   const bodies = [];
@@ -486,6 +526,7 @@ function generate() {
       currentSvg = addGalaxyArm(currentSvg, galaxyRng, $('galaxyTest')?.checked === true);
       currentSvg = addMoon(currentSvg, celestialRng);
       currentSvg = addRingedPlanet(currentSvg, planetRng);
+      currentSvg = applyStarBodyOcclusion(currentSvg);
       currentSvg = applyCelestialOverlapOcclusion(currentSvg);
       currentSvg = applyGalaxyBodyOcclusion(currentSvg);
     }
