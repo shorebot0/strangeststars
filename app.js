@@ -10,9 +10,6 @@ function setStatus(message) { $('status').textContent = message; }
 
 
 async function updateVersionInfo() {
-  const appMatch = document.body.innerHTML.match(/app\.js v(\d+)/i);
-  const appVersion = appMatch ? `v${appMatch[1]}` : 'unknown';
-
   async function readVersion(url, pattern) {
     try {
       const response = await fetch(url, { cache: 'no-cache' });
@@ -26,9 +23,15 @@ async function updateVersionInfo() {
     }
   }
 
-  const [cssVersion, indexVersion] = await Promise.all([
+  const appScript = [...document.scripts].find(script =>
+    /(?:^|\/)app\.js(?:$|\?)/i.test(script.src)
+  );
+  const appUrl = appScript ? appScript.src : 'app.js';
+
+  const [cssVersion, indexVersion, appVersion] = await Promise.all([
     readVersion('style.css', /Strangest Stars CSS v(\d+)/i),
-    readVersion('index.html', /Strangest Stars INDEX v(\d+)/i)
+    readVersion('index.html', /Strangest Stars INDEX v(\d+)/i),
+    readVersion(appUrl, /app\.js v(\d+)/i)
   ]);
 
   const versionInfo = $('versionInfo');
