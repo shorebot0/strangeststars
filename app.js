@@ -159,7 +159,8 @@ function generate() {
         const maskPattern = new RegExp(`<mask\\s+id="${mountainMask}">([\\s\\S]*?)</mask>`);
         const maskMatch = currentSvg.match(maskPattern);
         if (maskMatch) {
-          const sunMask = `<mask id="sunOcclusion" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/><g>${maskMatch[1]}</g></mask>`;
+          const mountainShape = maskMatch[1].replace(/fill="white"/g, 'fill="black"');
+          const sunMask = `<mask id="sunOcclusion" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/><g>${mountainShape}</g></mask>`;
           currentSvg = currentSvg.replace('</defs>', `${sunMask}</defs>`);
           currentSvg = currentSvg.replace(/<circle /g, '<circle mask="url(#sunOcclusion)" ');
         }
