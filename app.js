@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v24 07-OCT-2026 21:18
+//app.js v25 07-OCT-2026 21:30
 
 const $ = id => document.getElementById(id);
 
@@ -152,8 +152,6 @@ function ensureGalaxyToggle() {
 
 function addGalaxyArm(svg, rng, force = false) {
   // Galactic-arm variant B: a layered, filamentary band with a luminous core.
-  // v24 keeps B's richer variation while making internal filaments wander
-  // independently, reducing the clean parallel-ribbon failure mode.
   // It remains one celestial object so the existing mountain/body occlusion
   // system can treat the entire phenomenon consistently.
   if (!force && rng() >= 0.03) return svg;
@@ -174,13 +172,13 @@ function addGalaxyArm(svg, rng, force = false) {
   const endX = centerX + length / 2;
 
   const curveY = t => centerY + Math.sin(t * Math.PI) * bend;
-  const pathFor = (offset, bendScale = 1, skew = 0) => {
+  const pathFor = (offset, bendScale = 1) => {
     const y0 = centerY + offset;
-    const y3 = centerY + offset * 0.18 + skew * 0.18;
-    const c1x = startX + length * (0.20 + skew * 0.001);
-    const c2x = endX - length * (0.20 - skew * 0.001);
-    const c1y = y0 - bend * bendScale + skew;
-    const c2y = y3 + bend * bendScale - skew * 0.65;
+    const y3 = centerY + offset * 0.25;
+    const c1x = startX + length * 0.24;
+    const c2x = endX - length * 0.24;
+    const c1y = y0 - bend * bendScale;
+    const c2y = y3 + bend * bendScale;
     return `M ${startX.toFixed(1)} ${y0.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${endX.toFixed(1)} ${y3.toFixed(1)}`;
   };
 
@@ -192,17 +190,10 @@ function addGalaxyArm(svg, rng, force = false) {
   const filaments = [];
   const filamentCount = 3 + Math.floor(rng() * 2);
   for (let i = 0; i < filamentCount; i++) {
-    // Do not distribute filaments as evenly spaced copies of one curve. Each
-    // filament gets its own lateral drift and curvature so they cannot easily
-    // line up into a clean ribbon for unlucky seeds.
-    const spread = (rng() * 1.25 + 0.35) * width;
-    const side = rng() < 0.5 ? -1 : 1;
-    const offset = side * spread * (0.18 + rng() * 0.82);
-    const filamentWidth = Math.floor(width * (0.18 + rng() * 0.30));
-    const filamentOpacity = (opacity * (0.75 + rng() * 1.35)).toFixed(3);
-    const filamentBend = 0.45 + rng() * 1.05;
-    const filamentSkew = rng() * width * 0.55 - width * 0.275;
-    const filamentPath = pathFor(offset, filamentBend, filamentSkew);
+    const offset = (i - (filamentCount - 1) / 2) * (width * 0.23) + (rng() * 16 - 8);
+    const filamentWidth = Math.floor(width * (0.22 + rng() * 0.28));
+    const filamentOpacity = (opacity * (0.9 + rng() * 1.25)).toFixed(3);
+    const filamentPath = pathFor(offset, 0.72 + rng() * 0.65);
     filaments.push(`<path d="${filamentPath}" fill="none" stroke="${accent}" stroke-width="${filamentWidth}" stroke-linecap="round" opacity="${filamentOpacity}" filter="url(#galaxyBlur)"/>`);
   }
 
@@ -388,7 +379,19 @@ function applyGalaxyBodyOcclusion(svg) {
     if (cx && cy && r) bodies.push({ start: match.index, cx: cx[1], cy: cy[1], r: r[1] });
   }
 
-  // Optional moon and ringed-planet bodies expose their solid silhouette.
+  // Optional moon bodies do not carry the silhouette marker because they are
+  // simple circles. Include their circle directly so the galaxy cannot show
+  // through translucent moons.
+  const moonRe = /<g\s+data-celestial-body="moon"[^>]*>\s*<circle\s+([^>]*?)\s*\/>\s*<\/g>/g;
+  while ((match = moonRe.exec(svg)) !== null) {
+    const attrs = match[1];
+    const cx = attrs.match(/\bcx="([^"]+)"/);
+    const cy = attrs.match(/\bcy="([^"]+)"/);
+    const r = attrs.match(/\br="([^"]+)"/);
+    if (cx && cy && r) bodies.push({ start: match.index, cx: cx[1], cy: cy[1], r: r[1] });
+  }
+
+  // Ringed planets expose their solid planetary silhouette explicitly.
   const silhouetteRe = /<circle\s+data-celestial-silhouette="true"\s+cx="([^"]+)"\s+cy="([^"]+)"\s+r="([^"]+)"/g;
   while ((match = silhouetteRe.exec(svg)) !== null) {
     bodies.push({ start: match.index, cx: match[1], cy: match[2], r: match[3] });
