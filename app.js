@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v16 07-OCT-2026 19:19
+//app.js v17 07-OCT-2026 19:25
 
 const $ = id => document.getElementById(id);
 
@@ -283,6 +283,71 @@ function addRingedPlanet(svg, rng) {
 // overlaps them, preventing translucent bodies from compositing like a Venn
 // diagram. The ringed planet's solid planet disk is its occluding silhouette;
 // its decorative ring is not treated as solid.
+function applyGalaxyBodyOcclusion(svg) {
+  // The galaxy is a background sky phenomenon. Even though it is rendered
+  // before the celestial bodies, translucent bodies would otherwise let the
+  // galaxy show through and make it look as though the galaxy cuts across them.
+  // Mask the galaxy out beneath every celestial-body silhouette while keeping
+  // the existing mountain occlusion as a separate outer mask.
+  const bodies = [];
+
+  // Original grammar suns remain individual circles carrying sunOcclusion.
+  const sunRe = /<circle\s+mask="url\(#sunOcclusion\)"\s+([^>]*?)(?:\s*\/>)/g;
+  let match;
+  while ((match = sunRe.exec(svg)) !== null) {
+    const attrs = match[1];
+    const cx = attrs.match(/\bcx="([^"]+)"/);
+    const cy = attrs.match(/\bcy="([^"]+)"/);
+    const r = attrs.match(/\br="([^"]+)"/);
+    if (cx && cy && r) bodies.push({ start: match.index, cx: cx[1], cy: cy[1], r: r[1] });
+  }
+
+  // Optional moon and ringed-planet bodies expose their solid silhouette.
+  const silhouetteRe = /<circle\s+data-celestial-silhouette="true"\s+cx="([^"]+)"\s+cy="([^"]+)"\s+r="([^"]+)"/g;
+  while ((match = silhouetteRe.exec(svg)) !== null) {
+    bodies.push({ start: match.index, cx: match[1], cy: match[2], r: match[3] });
+  }
+
+  if (!bodies.length) return svg;
+
+  const occluders = bodies.map(body =>
+    `<circle cx="${body.cx}" cy="${body.cy}" r="${body.r}" fill="black"/>`
+  ).join('');
+
+  const maskId = 'galaxyBodyOcclusion';
+  const mask = `<mask id="${maskId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/>${occluders}</mask>`;
+  svg = svg.replace('</defs>', `${mask}</defs>`);
+
+  const galaxyRe = /<g\s+data-celestial-body="galaxy-arm"[^>]*>/;
+  const galaxyOpen = svg.match(galaxyRe);
+  if (!galaxyOpen || galaxyOpen.index == null) return svg;
+
+  // Find the matching closing </g>, accounting for the nested rotated group.
+  const openIndex = galaxyOpen.index;
+  const contentStart = openIndex + galaxyOpen[0].length;
+  let depth = 1;
+  let cursor = contentStart;
+  while (depth > 0) {
+    const nextOpen = svg.indexOf('<g', cursor);
+    const nextClose = svg.indexOf('</g>', cursor);
+    if (nextClose === -1) return svg;
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      depth++;
+      cursor = nextOpen + 2;
+    } else {
+      depth--;
+      cursor = nextClose + 4;
+      if (depth === 0) {
+        const inner = svg.slice(contentStart, nextClose);
+        const wrapped = `<g mask="url(#${maskId})">${inner}</g>`;
+        return svg.slice(0, contentStart) + wrapped + svg.slice(nextClose);
+      }
+    }
+  }
+
+  return svg;
+}
+
 function applyCelestialOverlapOcclusion(svg) {
   const circleRe = /<circle\s+mask="url\(#sunOcclusion\)"\s+([^>]*?)(?:\s*\/)>/g;
   const bodies = [];
@@ -422,6 +487,7 @@ function generate() {
       currentSvg = addMoon(currentSvg, celestialRng);
       currentSvg = addRingedPlanet(currentSvg, planetRng);
       currentSvg = applyCelestialOverlapOcclusion(currentSvg);
+      currentSvg = applyGalaxyBodyOcclusion(currentSvg);
     }
 
     // Strip the wrapper text used by the original Tracery grammar.
