@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v11 07-OCT-2026 17:31
+//app.js v12 07-OCT-2026 17:39
 
 const $ = id => document.getElementById(id);
 
@@ -137,6 +137,27 @@ function makeGrammar(seed, occlude) {
   };
 }
 
+function addStars(svg, rng) {
+  // Experimental star field: zero or one field, independent of the grammar RNG.
+  if (rng() >= 0.35) return svg;
+
+  const count = Math.floor(rng() * 36) + 5;
+  const colors = ['white', 'grey', 'cyan', 'yellow', 'purple', 'orange', 'red', 'blue'];
+  const stars = [];
+
+  for (let i = 0; i < count; i++) {
+    const cx = Math.floor(rng() * 1024);
+    const cy = Math.floor(rng() * 300);
+    const radius = (rng() * 1.6 + 0.4).toFixed(1);
+    const fill = colors[Math.floor(rng() * colors.length)];
+    const opacity = (rng() * 0.45 + 0.35).toFixed(2);
+    stars.push(`<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${fill}" opacity="${opacity}"/>`);
+  }
+
+  const starField = `<g data-celestial-body="stars" mask="url(#sunOcclusion)">${stars.join('')}</g>`;
+  return svg.replace('</svg>', `${starField}</svg>`);
+}
+
 function addMoon(svg, rng) {
   // Small first-pass celestial-body experiment: zero or one moon.
   // Keep it deliberately independent of the original grammar.
@@ -220,6 +241,7 @@ function applyCelestialOverlapOcclusion(svg) {
   while ((match = taggedRe.exec(svg)) !== null) {
     const type = match[1];
     const bodyText = match[2];
+    if (type === 'stars') continue;
     if (type === 'moon') {
       const c = bodyText.match(/<circle\s+cx="([^"]+)"\s+cy="([^"]+)"\s+r="([^"]+)"/);
       if (c) tagged.push({ type, cx: c[1], cy: c[2], r: c[3], start: match.index, end: taggedRe.lastIndex });
@@ -297,6 +319,7 @@ function generate() {
     // adding moons does not alter any existing grammar choices.
     const celestialRng = splitmix32((currentSeed ^ 0x6d6f6f6e) >>> 0);
     const planetRng = splitmix32((currentSeed ^ 0x706c616e) >>> 0);
+    const starRng = splitmix32((currentSeed ^ 0x73746172) >>> 0);
 
     // The original mountain layers are translucent. Simply drawing the suns
     // first therefore still lets them shine through the mountains. Use the
@@ -329,6 +352,7 @@ function generate() {
     // Add the first experimental celestial body after the existing sun/mountain
     // processing. The moon uses the same occlusion mask as the suns.
     if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
+      currentSvg = addStars(currentSvg, starRng);
       currentSvg = addMoon(currentSvg, celestialRng);
       currentSvg = addRingedPlanet(currentSvg, planetRng);
       currentSvg = applyCelestialOverlapOcclusion(currentSvg);
