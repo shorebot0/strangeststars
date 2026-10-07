@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v25 07-OCT-2026 21:30
+//app.js v26 07-OCT-2026 21:38
 
 const $ = id => document.getElementById(id);
 
@@ -148,6 +148,96 @@ function ensureGalaxyToggle() {
   label.innerHTML = '<input type="checkbox" id="galaxyTest"> Force galactic arm (test)';
   occlude.parentElement.appendChild(label);
   $('galaxyTest').addEventListener('change', generate);
+}
+
+function ensureEclipseToggle() {
+  if ($('eclipseTest')) return;
+  const galaxy = $('galaxyTest');
+  const occlude = $('occlude');
+  const parent = galaxy?.parentElement || occlude?.parentElement;
+  if (!parent) return;
+
+  const label = document.createElement('label');
+  label.style.display = 'block';
+  label.style.marginTop = '6px';
+  label.innerHTML = '<input type="checkbox" id="eclipseTest"> Force solar eclipse (test)';
+  parent.appendChild(label);
+  $('eclipseTest').addEventListener('change', generate);
+}
+
+function addEclipse(svg, rng, force = false) {
+  // Rare event prototype: create a total/near-total solar eclipse around one
+  // of the original grammar suns. The moon is an explicit celestial silhouette
+  // so the existing galaxy/mountain/body occlusion system can depth-sort it.
+  if (!force && rng() >= 0.01) return svg;
+
+  const suns = [];
+  const sunRe = /<circle\s+mask="url\(#sunOcclusion\)"\s+([^>]*?)(?:\s*\/>)/g;
+  let match;
+  while ((match = sunRe.exec(svg)) !== null) {
+    const attrs = match[1];
+    const cx = attrs.match(/\bcx="([^"]+)"/);
+    const cy = attrs.match(/\bcy="([^"]+)"/);
+    const r = attrs.match(/\br="([^"]+)"/);
+    if (cx && cy && r) suns.push({ cx: Number(cx[1]), cy: Number(cy[1]), r: Number(r[1]) });
+  }
+
+  const viable = suns.filter(sun => sun.r >= 18);
+  if (!viable.length) return svg;
+
+  // Forced tests use the largest visible sun; normal events pick a viable sun
+  // deterministically from the eclipse RNG stream.
+  const target = force
+    ? viable.reduce((a, b) => b.r > a.r ? b : a)
+    : viable[Math.floor(rng() * viable.length)];
+
+  const coverage = 0.92 + rng() * 0.12;
+  const moonR = target.r * coverage;
+  const offsetMax = Math.max(1, target.r * (1 - coverage) * 0.55);
+  const offsetX = (rng() * 2 - 1) * offsetMax;
+  const offsetY = (rng() * 2 - 1) * offsetMax;
+  const moonX = target.cx + offsetX;
+  const moonY = target.cy + offsetY;
+
+  const coronaR = target.r * (1.48 + rng() * 0.28);
+  const glowR = target.r * (2.1 + rng() * 0.7);
+  const coronaColor = rng() < 0.68 ? '#fff1c2' : (rng() < 0.5 ? '#ffd18a' : '#b9e7ff');
+  const accentColor = rng() < 0.55 ? '#ffb35c' : '#d9f2ff';
+  const streamers = [];
+  const streamerCount = 5 + Math.floor(rng() * 5);
+  for (let i = 0; i < streamerCount; i++) {
+    const a = rng() * Math.PI * 2;
+    const reach = coronaR * (1.25 + rng() * 0.75);
+    const spread = (rng() * 0.18 + 0.05);
+    const x1 = moonX + Math.cos(a) * target.r * 0.95;
+    const y1 = moonY + Math.sin(a) * target.r * 0.95;
+    const x2 = moonX + Math.cos(a) * reach;
+    const y2 = moonY + Math.sin(a) * reach;
+    const bend = (rng() * 2 - 1) * reach * spread;
+    const px = -Math.sin(a) * bend;
+    const py = Math.cos(a) * bend;
+    const c1x = moonX + Math.cos(a) * (target.r * 1.35) + px;
+    const c1y = moonY + Math.sin(a) * (target.r * 1.35) + py;
+    const c2x = moonX + Math.cos(a) * (reach * 0.72) + px * 0.5;
+    const c2y = moonY + Math.sin(a) * (reach * 0.72) + py * 0.5;
+    const width = (rng() * 3 + 1.5).toFixed(1);
+    const opacity = (rng() * 0.24 + 0.10).toFixed(2);
+    streamers.push(`<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${accentColor}" stroke-width="${width}" opacity="${opacity}"/>`);
+  }
+
+  const eclipse = `
+    <g data-celestial-body="eclipse" mask="url(#sunOcclusion)">
+      <circle cx="${moonX.toFixed(1)}" cy="${moonY.toFixed(1)}" r="${glowR.toFixed(1)}" fill="${coronaColor}" opacity=".10" filter="url(#eclipseGlow)"/>
+      <circle cx="${moonX.toFixed(1)}" cy="${moonY.toFixed(1)}" r="${coronaR.toFixed(1)}" fill="none" stroke="${coronaColor}" stroke-width="${Math.max(3, target.r * 0.11).toFixed(1)}" opacity=".38" filter="url(#eclipseSoft)"/>
+      ${streamers.join('')}
+      <circle data-celestial-silhouette="true" cx="${moonX.toFixed(1)}" cy="${moonY.toFixed(1)}" r="${moonR.toFixed(1)}" fill="#02040a"/>
+    </g>`;
+
+  const defs = `
+    <filter id="eclipseGlow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="${Math.max(8, target.r * 0.30).toFixed(1)}"/></filter>
+    <filter id="eclipseSoft" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="${Math.max(2, target.r * 0.07).toFixed(1)}"/></filter>`;
+  svg = svg.replace('</defs>', `${defs}</defs>`);
+  return svg.replace('</svg>', `${eclipse}</svg>`);
 }
 
 function addGalaxyArm(svg, rng, force = false) {
@@ -503,6 +593,9 @@ function applyCelestialOverlapOcclusion(svg) {
     if (type === 'moon') {
       const c = bodyText.match(/<circle\s+cx="([^"]+)"\s+cy="([^"]+)"\s+r="([^"]+)"/);
       if (c) tagged.push({ type, cx: c[1], cy: c[2], r: c[3], start: match.index, end: taggedRe.lastIndex });
+    } else if (type === 'eclipse') {
+      const c = bodyText.match(/<circle\s+data-celestial-silhouette="true"\s+cx="([^"]+)"\s+cy="([^"]+)"\s+r="([^"]+)"/);
+      if (c) tagged.push({ type, cx: c[1], cy: c[2], r: c[3], start: match.index, end: taggedRe.lastIndex });
     } else if (type === 'ringed-planet') {
       const c = bodyText.match(/<circle\s+data-celestial-silhouette="true"\s+cx="([^"]+)"\s+cy="([^"]+)"\s+r="([^"]+)"/);
       if (c) tagged.push({ type, cx: c[1], cy: c[2], r: c[3], start: match.index, end: taggedRe.lastIndex });
@@ -579,6 +672,7 @@ function generate() {
     const planetRng = splitmix32((currentSeed ^ 0x706c616e) >>> 0);
     const starRng = splitmix32((currentSeed ^ 0x73746172) >>> 0);
     const galaxyRng = splitmix32((currentSeed ^ 0x67616c78) >>> 0);
+    const eclipseRng = splitmix32((currentSeed ^ 0x65636c70) >>> 0);
 
     // The original mountain layers are translucent. Simply drawing the suns
     // first therefore still lets them shine through the mountains. Use the
@@ -611,6 +705,7 @@ function generate() {
     // Add the first experimental celestial body after the existing sun/mountain
     // processing. The moon uses the same occlusion mask as the suns.
     if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
+      currentSvg = addEclipse(currentSvg, eclipseRng, $('eclipseTest')?.checked === true);
       currentSvg = addStars(currentSvg, starRng);
       // Apply star/body occlusion before inserting the optional galaxy object.
       // This keeps the nested star group self-contained; otherwise the galaxy
@@ -682,6 +777,7 @@ $('seed').addEventListener('keydown', event => { if (event.key === 'Enter') gene
   try {
     await loadGrammar();
     ensureGalaxyToggle();
+    ensureEclipseToggle();
     setStatus('Ready.');
     generate();
   } catch (error) {
