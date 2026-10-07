@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v18 07-OCT-2026 19:36
+//app.js v19 07-OCT-2026 19:43
 
 const $ = id => document.getElementById(id);
 
@@ -523,10 +523,13 @@ function generate() {
     // processing. The moon uses the same occlusion mask as the suns.
     if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
       currentSvg = addStars(currentSvg, starRng);
+      // Apply star/body occlusion before inserting the optional galaxy object.
+      // This keeps the nested star group self-contained; otherwise the galaxy
+      // can be accidentally captured by the star group's nested </g> parsing.
+      currentSvg = applyStarBodyOcclusion(currentSvg);
       currentSvg = addGalaxyArm(currentSvg, galaxyRng, $('galaxyTest')?.checked === true);
       currentSvg = addMoon(currentSvg, celestialRng);
       currentSvg = addRingedPlanet(currentSvg, planetRng);
-      currentSvg = applyStarBodyOcclusion(currentSvg);
       currentSvg = applyCelestialOverlapOcclusion(currentSvg);
       currentSvg = applyGalaxyBodyOcclusion(currentSvg);
     }
