@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v23 07-OCT-2026 21:08
+//app.js v24 07-OCT-2026 21:18
 
 const $ = id => document.getElementById(id);
 
@@ -152,6 +152,8 @@ function ensureGalaxyToggle() {
 
 function addGalaxyArm(svg, rng, force = false) {
   // Galactic-arm variant B: a layered, filamentary band with a luminous core.
+  // v24 keeps B's richer variation while making internal filaments wander
+  // independently, reducing the clean parallel-ribbon failure mode.
   // It remains one celestial object so the existing mountain/body occlusion
   // system can treat the entire phenomenon consistently.
   if (!force && rng() >= 0.03) return svg;
@@ -172,13 +174,13 @@ function addGalaxyArm(svg, rng, force = false) {
   const endX = centerX + length / 2;
 
   const curveY = t => centerY + Math.sin(t * Math.PI) * bend;
-  const pathFor = (offset, bendScale = 1) => {
+  const pathFor = (offset, bendScale = 1, skew = 0) => {
     const y0 = centerY + offset;
-    const y3 = centerY + offset * 0.25;
-    const c1x = startX + length * 0.24;
-    const c2x = endX - length * 0.24;
-    const c1y = y0 - bend * bendScale;
-    const c2y = y3 + bend * bendScale;
+    const y3 = centerY + offset * 0.18 + skew * 0.18;
+    const c1x = startX + length * (0.20 + skew * 0.001);
+    const c2x = endX - length * (0.20 - skew * 0.001);
+    const c1y = y0 - bend * bendScale + skew;
+    const c2y = y3 + bend * bendScale - skew * 0.65;
     return `M ${startX.toFixed(1)} ${y0.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${endX.toFixed(1)} ${y3.toFixed(1)}`;
   };
 
@@ -190,10 +192,17 @@ function addGalaxyArm(svg, rng, force = false) {
   const filaments = [];
   const filamentCount = 3 + Math.floor(rng() * 2);
   for (let i = 0; i < filamentCount; i++) {
-    const offset = (i - (filamentCount - 1) / 2) * (width * 0.23) + (rng() * 16 - 8);
-    const filamentWidth = Math.floor(width * (0.22 + rng() * 0.28));
-    const filamentOpacity = (opacity * (0.9 + rng() * 1.25)).toFixed(3);
-    const filamentPath = pathFor(offset, 0.72 + rng() * 0.65);
+    // Do not distribute filaments as evenly spaced copies of one curve. Each
+    // filament gets its own lateral drift and curvature so they cannot easily
+    // line up into a clean ribbon for unlucky seeds.
+    const spread = (rng() * 1.25 + 0.35) * width;
+    const side = rng() < 0.5 ? -1 : 1;
+    const offset = side * spread * (0.18 + rng() * 0.82);
+    const filamentWidth = Math.floor(width * (0.18 + rng() * 0.30));
+    const filamentOpacity = (opacity * (0.75 + rng() * 1.35)).toFixed(3);
+    const filamentBend = 0.45 + rng() * 1.05;
+    const filamentSkew = rng() * width * 0.55 - width * 0.275;
+    const filamentPath = pathFor(offset, filamentBend, filamentSkew);
     filaments.push(`<path d="${filamentPath}" fill="none" stroke="${accent}" stroke-width="${filamentWidth}" stroke-linecap="round" opacity="${filamentOpacity}" filter="url(#galaxyBlur)"/>`);
   }
 
