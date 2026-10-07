@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v13 07-OCT-2026 17:44
+//app.js v14 07-OCT-2026 17:58
 
 const $ = id => document.getElementById(id);
 
@@ -135,6 +135,56 @@ function makeGrammar(seed, occlude) {
     flatten: expression => choose(expression.replace(/^#|#$/g, ''), {}, 0),
     getMountainMask: () => mountainMask
   };
+}
+
+function ensureGalaxyToggle() {
+  if ($('galaxyTest')) return;
+  const occlude = $('occlude');
+  if (!occlude || !occlude.parentElement) return;
+
+  const label = document.createElement('label');
+  label.style.display = 'block';
+  label.style.marginTop = '6px';
+  label.innerHTML = '<input type="checkbox" id="galaxyTest"> Force galactic arm (test)';
+  occlude.parentElement.appendChild(label);
+  $('galaxyTest').addEventListener('change', generate);
+}
+
+function addGalaxyArm(svg, rng, force = false) {
+  // Galactic arms are intentionally rare in normal generation. The test toggle
+  // bypasses this roll so we can reliably inspect the effect while developing.
+  if (!force && rng() >= 0.03) return svg;
+
+  const colors = ['white', 'grey', 'cyan', 'yellow', 'purple', 'orange', 'red', 'blue'];
+  const starCount = Math.floor(rng() * 70) + 45;
+  const direction = rng() < 0.5 ? 1 : -1;
+  const startX = Math.floor(rng() * 180 + 60);
+  const startY = Math.floor(rng() * 90 + 80);
+  const curve = rng() * 0.000010 + 0.000004;
+  const spread = rng() * 24 + 10;
+  const length = rng() * 0.0009 + 0.0014;
+  const stars = [];
+
+  for (let i = 0; i < starCount; i++) {
+    const t = i / (starCount - 1);
+    const x = startX + direction * (t * 900);
+    const y = startY + Math.sin(t * 5.5) * 70 + curve * (t * 900) * (t * 900);
+    const jitterX = (rng() - 0.5) * spread * 2;
+    const jitterY = (rng() - 0.5) * spread;
+    const cx = Math.round(x + jitterX);
+    const cy = Math.round(y + jitterY);
+    if (cx < 0 || cx > 1024 || cy < 0 || cy > 300) continue;
+
+    const radius = (rng() * 1.7 + 0.5).toFixed(1);
+    const fill = colors[Math.floor(rng() * colors.length)];
+    const opacity = (rng() * 0.45 + 0.35).toFixed(2);
+    stars.push(`<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${fill}" opacity="${opacity}"/>`);
+  }
+
+  const arm = `<g data-celestial-body="galaxy-arm" mask="url(#sunOcclusion)">${stars.join('')}</g>`;
+  const firstSun = svg.indexOf('<circle ');
+  if (firstSun >= 0) return svg.slice(0, firstSun) + arm + svg.slice(firstSun);
+  return svg.replace('</svg>', `${arm}</svg>`);
 }
 
 function addStars(svg, rng) {
@@ -324,6 +374,7 @@ function generate() {
     const celestialRng = splitmix32((currentSeed ^ 0x6d6f6f6e) >>> 0);
     const planetRng = splitmix32((currentSeed ^ 0x706c616e) >>> 0);
     const starRng = splitmix32((currentSeed ^ 0x73746172) >>> 0);
+    const galaxyRng = splitmix32((currentSeed ^ 0x67616c78) >>> 0);
 
     // The original mountain layers are translucent. Simply drawing the suns
     // first therefore still lets them shine through the mountains. Use the
@@ -357,6 +408,7 @@ function generate() {
     // processing. The moon uses the same occlusion mask as the suns.
     if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
       currentSvg = addStars(currentSvg, starRng);
+      currentSvg = addGalaxyArm(currentSvg, galaxyRng, $('galaxyTest')?.checked === true);
       currentSvg = addMoon(currentSvg, celestialRng);
       currentSvg = addRingedPlanet(currentSvg, planetRng);
       currentSvg = applyCelestialOverlapOcclusion(currentSvg);
@@ -417,6 +469,7 @@ $('seed').addEventListener('keydown', event => { if (event.key === 'Enter') gene
 (async function init() {
   try {
     await loadGrammar();
+    ensureGalaxyToggle();
     setStatus('Ready.');
     generate();
   } catch (error) {
