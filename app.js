@@ -136,6 +136,10 @@ function generate() {
   try {
     const grammar = makeGrammar(currentSeed, $('occlude').checked);
     currentSvg = grammar.flatten('#origin#');
+
+    // Strip the old Tracery SVG wrapper.
+    currentSvg = currentSvg.replace(/^\{svg\s*/, '').replace(/\}\s*$/, '');
+
     if (!currentSvg.includes('<svg')) throw new Error('Generated output does not contain an SVG.');
     $('art').innerHTML = currentSvg;
     setStatus(`Generated from seed ${currentSeed}.`);
