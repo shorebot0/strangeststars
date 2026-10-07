@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v20 07-OCT-2026 20:38
+//app.js v21 07-OCT-2026 20:44
 
 const $ = id => document.getElementById(id);
 
@@ -541,8 +541,11 @@ function generate() {
       currentSvg = addGalaxyArm(currentSvg, galaxyRng, $('galaxyTest')?.checked === true);
       currentSvg = addMoon(currentSvg, celestialRng);
       currentSvg = addRingedPlanet(currentSvg, planetRng);
-      currentSvg = applyCelestialOverlapOcclusion(currentSvg);
+      // Build the galaxy occlusion mask only after every celestial body has
+      // been added, so suns, moons, and planets all contribute their
+      // silhouettes. Apply the body-to-body overlap masks afterward.
       currentSvg = applyGalaxyBodyOcclusion(currentSvg);
+      currentSvg = applyCelestialOverlapOcclusion(currentSvg);
     }
 
     // Strip the wrapper text used by the original Tracery grammar.
