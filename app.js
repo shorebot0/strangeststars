@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v10 07-OCT-2026 17:25
+//app.js v11 07-OCT-2026 17:31
 
 const $ = id => document.getElementById(id);
 
@@ -170,15 +170,24 @@ function addRingedPlanet(svg, rng) {
   const ry = Math.floor(radius * (0.28 + rng() * 0.18));
   const rotation = Math.floor(rng() * 160 - 80);
 
-  // Keep the existing ring-behind-planet behavior for now. The only v10
-  // change is celestial-body overlap: this whole body is treated as one
-  // occluding object when it is in front of another body.
+  // Split the ring into back and front halves so the planet sits between them.
+  // The two arcs use the same ellipse geometry and rotation; only their sweep
+  // direction differs, giving the ring a clear depth relationship with the planet.
+  const strokeWidth = Math.max(2, Math.floor(radius * 0.10));
+  const left = cx - rx;
+  const right = cx + rx;
+  const ringBack = `<path d="M ${left} ${cy} A ${rx} ${ry} 0 0 0 ${right} ${cy}"
+      fill="none" stroke="${ringColor}" stroke-width="${strokeWidth}"
+      opacity="${ringOpacity}" transform="rotate(${rotation} ${cx} ${cy})"/>`;
+  const ringFront = `<path d="M ${left} ${cy} A ${rx} ${ry} 0 0 1 ${right} ${cy}"
+      fill="none" stroke="${ringColor}" stroke-width="${strokeWidth}"
+      opacity="${ringOpacity}" transform="rotate(${rotation} ${cx} ${cy})"/>`;
+
   const planet = `
     <g data-celestial-body="ringed-planet" mask="url(#sunOcclusion)" opacity="${opacity}">
-      <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none"
-               stroke="${ringColor}" stroke-width="${Math.max(2, Math.floor(radius * 0.10))}"
-               opacity="${ringOpacity}" transform="rotate(${rotation} ${cx} ${cy})"/>
+      ${ringBack}
       <circle data-celestial-silhouette="true" cx="${cx}" cy="${cy}" r="${radius}" fill="${planetColor}"/>
+      ${ringFront}
     </g>`;
 
   return svg.replace('</svg>', `${planet}</svg>`);
