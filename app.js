@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v14 07-OCT-2026 17:58
+//app.js v15 07-OCT-2026 19:03
 
 const $ = id => document.getElementById(id);
 
@@ -151,37 +151,46 @@ function ensureGalaxyToggle() {
 }
 
 function addGalaxyArm(svg, rng, force = false) {
-  // Galactic arms are intentionally rare in normal generation. The test toggle
-  // bypasses this roll so we can reliably inspect the effect while developing.
+  // Prototype galactic arm: this is a separate diffuse SVG object rather than
+  // a special arrangement of ordinary stars. It is intentionally rare unless
+  // the test toggle forces it on.
   if (!force && rng() >= 0.03) return svg;
 
   const colors = ['white', 'grey', 'cyan', 'yellow', 'purple', 'orange', 'red', 'blue'];
-  const starCount = Math.floor(rng() * 70) + 45;
-  const direction = rng() < 0.5 ? 1 : -1;
-  const startX = Math.floor(rng() * 180 + 60);
-  const startY = Math.floor(rng() * 90 + 80);
-  const curve = rng() * 0.000010 + 0.000004;
-  const spread = rng() * 24 + 10;
-  const length = rng() * 0.0009 + 0.0014;
-  const stars = [];
+  const color = colors[Math.floor(rng() * colors.length)];
+  const accent = colors[Math.floor(rng() * colors.length)];
+  const angle = Math.floor(rng() * 360);
+  const centerX = Math.floor(rng() * 700 + 160);
+  const centerY = Math.floor(rng() * 130 + 70);
+  const length = Math.floor(rng() * 260 + 620);
+  const bend = Math.floor(rng() * 180 - 90);
+  const width = Math.floor(rng() * 45 + 55);
+  const opacity = (rng() * 0.10 + 0.08).toFixed(2);
+  const accentOpacity = (rng() * 0.08 + 0.04).toFixed(2);
+  const blur = (rng() * 7 + 3).toFixed(1);
 
-  for (let i = 0; i < starCount; i++) {
-    const t = i / (starCount - 1);
-    const x = startX + direction * (t * 900);
-    const y = startY + Math.sin(t * 5.5) * 70 + curve * (t * 900) * (t * 900);
-    const jitterX = (rng() - 0.5) * spread * 2;
-    const jitterY = (rng() - 0.5) * spread;
-    const cx = Math.round(x + jitterX);
-    const cy = Math.round(y + jitterY);
-    if (cx < 0 || cx > 1024 || cy < 0 || cy > 300) continue;
+  const startX = centerX - length / 2;
+  const endX = centerX + length / 2;
+  const control1X = startX + length * 0.28;
+  const control2X = endX - length * 0.28;
+  const control1Y = centerY - bend;
+  const control2Y = centerY + bend;
+  const path = `M ${startX.toFixed(1)} ${centerY.toFixed(1)} C ${control1X.toFixed(1)} ${control1Y.toFixed(1)}, ${control2X.toFixed(1)} ${control2Y.toFixed(1)}, ${endX.toFixed(1)} ${centerY.toFixed(1)}`;
 
-    const radius = (rng() * 1.7 + 0.5).toFixed(1);
-    const fill = colors[Math.floor(rng() * colors.length)];
-    const opacity = (rng() * 0.45 + 0.35).toFixed(2);
-    stars.push(`<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${fill}" opacity="${opacity}"/>`);
-  }
+  const arm = `
+    <g data-celestial-body="galaxy-arm" mask="url(#sunOcclusion)"
+       transform="rotate(${angle} ${centerX} ${centerY})">
+      <path d="${path}" fill="none" stroke="${color}"
+            stroke-width="${width}" stroke-linecap="round"
+            opacity="${opacity}" filter="url(#galaxyBlur)"/>
+      <path d="${path}" fill="none" stroke="${accent}"
+            stroke-width="${Math.max(8, Math.floor(width * 0.35))}"
+            stroke-linecap="round" opacity="${accentOpacity}"/>
+    </g>`;
 
-  const arm = `<g data-celestial-body="galaxy-arm" mask="url(#sunOcclusion)">${stars.join('')}</g>`;
+  const defs = `<filter id="galaxyBlur" x="-30%" y="-100%" width="160%" height="300%"><feGaussianBlur stdDeviation="${blur}"/></filter>`;
+  svg = svg.replace('</defs>', `${defs}</defs>`);
+
   const firstSun = svg.indexOf('<circle ');
   if (firstSun >= 0) return svg.slice(0, firstSun) + arm + svg.slice(firstSun);
   return svg.replace('</svg>', `${arm}</svg>`);
