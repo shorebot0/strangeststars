@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v12 07-OCT-2026 17:39
+//app.js v13 07-OCT-2026 17:44
 
 const $ = id => document.getElementById(id);
 
@@ -155,6 +155,10 @@ function addStars(svg, rng) {
   }
 
   const starField = `<g data-celestial-body="stars" mask="url(#sunOcclusion)">${stars.join('')}</g>`;
+  const firstSun = svg.indexOf('<circle ');
+  if (firstSun >= 0) {
+    return svg.slice(0, firstSun) + starField + svg.slice(firstSun);
+  }
   return svg.replace('</svg>', `${starField}</svg>`);
 }
 
