@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v19 07-OCT-2026 19:43
+//app.js v20 07-OCT-2026 20:38
 
 const $ = id => document.getElementById(id);
 
@@ -192,8 +192,19 @@ function addGalaxyArm(svg, rng, force = false) {
   const defs = `<filter id="galaxyBlur" x="-30%" y="-100%" width="160%" height="300%"><feGaussianBlur stdDeviation="${blur}"/></filter>`;
   svg = svg.replace('</defs>', `${defs}</defs>`);
 
-  const firstSun = svg.indexOf('<circle ');
-  if (firstSun >= 0) return svg.slice(0, firstSun) + arm + svg.slice(firstSun);
+  // Insert the galaxy into the rendered SVG body, before the first mountain
+  // layer. Do not use the first <circle> as an anchor: masks/definitions and
+  // other generated content can contain circles before the visible scene.
+  // This keeps the galaxy out of <defs> while placing it behind the mountains
+  // and the foreground celestial bodies.
+  const mountainMatch = svg.match(/<rect[^>]*mask="url\(#overlay\d+\)"[^>]*>/);
+  if (mountainMatch && mountainMatch.index != null) {
+    return svg.slice(0, mountainMatch.index) + arm + svg.slice(mountainMatch.index);
+  }
+
+  // Fallback: insert immediately after the opening SVG tag, still outside defs.
+  const svgOpen = svg.indexOf('>');
+  if (svgOpen >= 0) return svg.slice(0, svgOpen + 1) + arm + svg.slice(svgOpen + 1);
   return svg.replace('</svg>', `${arm}</svg>`);
 }
 
