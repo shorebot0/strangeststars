@@ -49,6 +49,7 @@ async function loadGrammar() {
 // self-contained.
 function makeGrammar(seed, occlude) {
   const grammarData = structuredClone(sourceGrammar);
+  let mountainMask = null;
   if (occlude) {
     // Original: bg -> mountains -> clouds -> suns.
     // New:      bg -> suns -> mountains -> clouds.
@@ -68,6 +69,10 @@ function makeGrammar(seed, occlude) {
       throw new Error(`Unknown grammar symbol: ${symbol}`);
     }
     const rule = rules[Math.floor(rng() * rules.length)];
+    if (occlude && symbol === 'mountains') {
+      const masks = [...String(rule).matchAll(/mask=\"url\\\(#(overlay\d+)\\\)\"/g)];
+      if (masks.length) mountainMask = masks[masks.length - 1][1];
+    }
     return expandText(String(rule), { ...state }, depth + 1);
   }
 
@@ -124,7 +129,10 @@ function makeGrammar(seed, occlude) {
     return out;
   }
 
-  return { flatten: expression => choose(expression.replace(/^#|#$/g, ''), {}, 0) };
+  return {
+    flatten: expression => choose(expression.replace(/^#|#$/g, ''), {}, 0),
+    getMountainMask: () => mountainMask
+  };
 }
 
 function generate() {
@@ -136,11 +144,23 @@ function generate() {
   try {
     const grammar = makeGrammar(currentSeed, $('occlude').checked);
     currentSvg = grammar.flatten('#origin#');
-
-    // Strip the old Tracery SVG wrapper.
-    currentSvg = currentSvg.replace(/^\{svg\s*/, '').replace(/\}\s*$/, '');
-
     if (!currentSvg.includes('<svg')) throw new Error('Generated output does not contain an SVG.');
+
+    // The original mountain layers are translucent. Simply drawing the suns
+    // first therefore still lets them shine through the mountains. Use the
+    // exact cumulative mask belonging to the selected mountain stack to mask
+    // the suns themselves, preserving the original mountain appearance.
+    if ($('occlude').checked) {
+      const mountainMask = grammar.getMountainMask();
+      if (mountainMask) {
+        const sunMask = `<mask id="sunOcclusion" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="1024" height="512" fill="white"/><rect x="0" y="0" width="1024" height="512" fill="black" mask="url(#${mountainMask})"/></mask>`;
+        currentSvg = currentSvg.replace('</defs>', `${sunMask}</defs>`);
+        currentSvg = currentSvg.replace(/<circle /g, '<circle mask="url(#sunOcclusion)" ');
+      }
+    }
+
+    // Strip the wrapper text used by the original Tracery grammar.
+    currentSvg = currentSvg.replace(/^\{svg\s*/, '').replace(/\}\s*$/, '');
     $('art').innerHTML = currentSvg;
     setStatus(`Generated from seed ${currentSeed}.`);
   } catch (error) {
