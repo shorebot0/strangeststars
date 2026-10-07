@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v15 07-OCT-2026 19:03
+//app.js v16 07-OCT-2026 19:19
 
 const $ = id => document.getElementById(id);
 
@@ -178,14 +178,15 @@ function addGalaxyArm(svg, rng, force = false) {
   const path = `M ${startX.toFixed(1)} ${centerY.toFixed(1)} C ${control1X.toFixed(1)} ${control1Y.toFixed(1)}, ${control2X.toFixed(1)} ${control2Y.toFixed(1)}, ${endX.toFixed(1)} ${centerY.toFixed(1)}`;
 
   const arm = `
-    <g data-celestial-body="galaxy-arm" mask="url(#sunOcclusion)"
-       transform="rotate(${angle} ${centerX} ${centerY})">
+    <g data-celestial-body="galaxy-arm" mask="url(#sunOcclusion)">
+      <g transform="rotate(${angle} ${centerX} ${centerY})">
       <path d="${path}" fill="none" stroke="${color}"
             stroke-width="${width}" stroke-linecap="round"
             opacity="${opacity}" filter="url(#galaxyBlur)"/>
       <path d="${path}" fill="none" stroke="${accent}"
             stroke-width="${Math.max(8, Math.floor(width * 0.35))}"
             stroke-linecap="round" opacity="${accentOpacity}"/>
+      </g>
     </g>`;
 
   const defs = `<filter id="galaxyBlur" x="-30%" y="-100%" width="160%" height="300%"><feGaussianBlur stdDeviation="${blur}"/></filter>`;
