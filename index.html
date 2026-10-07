@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Strangest Stars — Procedural Landscapes</title>
+  <meta name="description" content="A procedural SVG landscape generator based on the original Strangest Stars Tracery grammar.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">PROCEDURAL LANDSCAPE GENERATOR</div>
+      <h1>Strangest Stars</h1>
+    </div>
+    <div class="seed-badge">SEED <span id="seedLabel">—</span></div>
+  </header>
+
+  <main class="layout">
+    <section class="art-panel">
+      <div id="art" class="art" aria-label="Generated landscape"></div>
+      <div class="status" id="status">Loading grammar…</div>
+    </section>
+
+    <aside class="controls">
+      <button id="generate" class="primary">Generate landscape</button>
+
+      <label class="field">
+        <span>Seed</span>
+        <div class="seed-row">
+          <input id="seed" type="text" inputmode="numeric" placeholder="Random">
+          <button id="randomSeed" title="Randomize seed">↻</button>
+        </div>
+      </label>
+
+      <label class="check">
+        <input id="occlude" type="checkbox" checked>
+        <span>
+          <strong>Put suns behind mountains</strong>
+          <small>Preserves the original sun geometry, but fixes the clipping problem.</small>
+        </span>
+      </label>
+
+      <div class="divider"></div>
+
+      <div class="section-title">Export</div>
+      <div class="button-grid">
+        <button id="downloadSvg">Download SVG</button>
+        <button id="downloadPng">Download PNG</button>
+      </div>
+      <label class="field">
+        <span>PNG scale</span>
+        <select id="pngScale">
+          <option value="2">2× — 2048 × 1024</option>
+          <option value="4" selected>4× — 4096 × 2048</option>
+          <option value="6">6× — 6144 × 3072</option>
+          <option value="8">8× — 8192 × 4096</option>
+        </select>
+      </label>
+
+      <div class="divider"></div>
+      <details>
+        <summary>About this version</summary>
+        <p>This is a revival of the original Tracery/SVG generator. The source grammar is kept separately as <code>grammar.json</code>; the web UI is new.</p>
+        <p>Next candidates: stars/moons, rare Easter eggs, better palettes, print/playmat presets, and a proper seeded scene system.</p>
+      </details>
+    </aside>
+  </main>
+
+  <footer>
+    <span>Original canvas: 1024 × 512</span>
+    <span>SVG-first • deterministic seeds</span>
+  </footer>
+
+  <script>
+    // Load Tracery from a CDN. The site remains a plain static GitHub Pages app.
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/tracery-grammar@2.8.4/lib/tracery.js';
+    script.onload = () => window.dispatchEvent(new Event('tracery-ready'));
+    script.onerror = () => {
+      const fallback = document.createElement('script');
+      fallback.src = 'https://raw.githubusercontent.com/v21/tracery/master/tracery.js';
+      fallback.onload = () => window.dispatchEvent(new Event('tracery-ready'));
+      fallback.onerror = () => setStatus('Could not load Tracery. Check your connection.');
+      document.head.appendChild(fallback);
+    };
+    document.head.appendChild(script);
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>
