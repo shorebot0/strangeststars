@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v8 07-OCT-2026 13:41
+//app.js v9 07-OCT-2026 14:03
 
 const $ = id => document.getElementById(id);
 
@@ -154,6 +154,34 @@ function addMoon(svg, rng) {
   return svg.replace('</svg>', `${moon}</svg>`);
 }
 
+function addRingedPlanet(svg, rng) {
+  // First-pass ringed planet: zero or one, independent of the grammar RNG.
+  if (rng() >= 0.18) return svg;
+
+  const cx = Math.floor(rng() * 900 + 60);
+  const cy = Math.floor(rng() * 190 + 35);
+  const radius = Math.floor(rng() * 28 + 18);
+  const colors = ['white', 'grey', 'black', 'cyan', 'yellow', 'purple', 'orange', 'red', 'blue'];
+  const planetColor = colors[Math.floor(rng() * colors.length)];
+  const ringColor = colors[Math.floor(rng() * colors.length)];
+  const opacity = (rng() * 0.14 + 0.08).toFixed(2);
+  const ringOpacity = (rng() * 0.12 + 0.08).toFixed(2);
+  const rx = Math.floor(radius * (1.7 + rng() * 0.9));
+  const ry = Math.floor(radius * (0.28 + rng() * 0.18));
+  const rotation = Math.floor(rng() * 160 - 80);
+
+  // Draw the ring behind the planet, then the planet over it.
+  const planet = `
+    <g mask="url(#sunOcclusion)" opacity="${opacity}">
+      <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none"
+               stroke="${ringColor}" stroke-width="${Math.max(2, Math.floor(radius * 0.10))}"
+               opacity="${ringOpacity}" transform="rotate(${rotation} ${cx} ${cy})"/>
+      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${planetColor}"/>
+    </g>`;
+
+  return svg.replace('</svg>', `${planet}</svg>`);
+}
+
 function generate() {
   if (!sourceGrammar) return;
   const seedText = $('seed').value;
@@ -168,6 +196,7 @@ function generate() {
     // Use a separate deterministic RNG stream for the new moon experiment so
     // adding moons does not alter any existing grammar choices.
     const celestialRng = splitmix32((currentSeed ^ 0x6d6f6f6e) >>> 0);
+    const planetRng = splitmix32((currentSeed ^ 0x706c616e) >>> 0);
 
     // The original mountain layers are translucent. Simply drawing the suns
     // first therefore still lets them shine through the mountains. Use the
@@ -201,6 +230,7 @@ function generate() {
     // processing. The moon uses the same occlusion mask as the suns.
     if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
       currentSvg = addMoon(currentSvg, celestialRng);
+      currentSvg = addRingedPlanet(currentSvg, planetRng);
     }
 
     // Strip the wrapper text used by the original Tracery grammar.
