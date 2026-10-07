@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v7 07-OCT-2026 13:24
+//app.js v8 07-OCT-2026 13:41
 
 const $ = id => document.getElementById(id);
 
@@ -137,6 +137,23 @@ function makeGrammar(seed, occlude) {
   };
 }
 
+function addMoon(svg, rng) {
+  // Small first-pass celestial-body experiment: zero or one moon.
+  // Keep it deliberately independent of the original grammar.
+  if (rng() >= 0.35) return svg;
+
+  const cx = Math.floor(rng() * 1000 + 12);
+  const cy = Math.floor(rng() * 220 + 20);
+  const radius = Math.floor(rng() * 45 + 15);
+  const colors = ['white', 'grey', 'black', 'cyan', 'yellow', 'purple', 'orange', 'red', 'blue'];
+  const fill = colors[Math.floor(rng() * colors.length)];
+  const opacity = (rng() * 0.12 + 0.08).toFixed(2);
+
+  const moon = `<circle mask="url(#sunOcclusion)" cx="${cx}" cy="${cy}" r="${radius}" fill="${fill}" opacity="${opacity}"/>`;
+
+  return svg.replace('</svg>', `${moon}</svg>`);
+}
+
 function generate() {
   if (!sourceGrammar) return;
   const seedText = $('seed').value;
@@ -147,6 +164,10 @@ function generate() {
     const grammar = makeGrammar(currentSeed, $('occlude').checked);
     currentSvg = grammar.flatten('#origin#');
     if (!currentSvg.includes('<svg')) throw new Error('Generated output does not contain an SVG.');
+
+    // Use a separate deterministic RNG stream for the new moon experiment so
+    // adding moons does not alter any existing grammar choices.
+    const celestialRng = splitmix32((currentSeed ^ 0x6d6f6f6e) >>> 0);
 
     // The original mountain layers are translucent. Simply drawing the suns
     // first therefore still lets them shine through the mountains. Use the
@@ -174,6 +195,12 @@ function generate() {
           currentSvg = currentSvg.replace(/<circle /g, '<circle mask="url(#sunOcclusion)" ');
         }
       }
+    }
+
+    // Add the first experimental celestial body after the existing sun/mountain
+    // processing. The moon uses the same occlusion mask as the suns.
+    if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
+      currentSvg = addMoon(currentSvg, celestialRng);
     }
 
     // Strip the wrapper text used by the original Tracery grammar.
