@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v27 07-OCT-2026 22:14
+//app.js v28 07-OCT-2026 22:32
 
 const $ = id => document.getElementById(id);
 
@@ -756,6 +756,15 @@ function generate() {
 
     // Strip the wrapper text used by the original Tracery grammar.
     currentSvg = currentSvg.replace(/^\{svg\s*/, '').replace(/\}\s*$/, '');
+
+    // The original grammar defines width/height but no viewBox.
+    // Add one so responsive CSS scales the complete 1024×512 scene
+    // instead of allowing the SVG viewport to crop on narrow screens.
+    currentSvg = currentSvg.replace(/<svg\\b([^>]*)>/i, (match, attrs) => {
+      if (/\\bviewBox\\s*=/.test(attrs)) return match;
+      return `<svg${attrs} viewBox="0 0 1024 512" preserveAspectRatio="xMidYMid meet">`;
+    });
+
     $('art').innerHTML = currentSvg;
     setStatus(`Generated from seed ${currentSeed}.`);
   } catch (error) {
