@@ -2,7 +2,7 @@ let sourceGrammar = null;
 let currentSvg = '';
 let currentSeed = null;
 
-//app.js v9 07-OCT-2026 14:03
+//app.js v10 07-OCT-2026 17:09
 
 const $ = id => document.getElementById(id);
 
@@ -155,7 +155,7 @@ function addMoon(svg, rng) {
 }
 
 function addRingedPlanet(svg, rng) {
-  // First-pass ringed planet: zero or one, independent of the grammar RNG.
+  // Ringed planet: zero or one, independent of the grammar RNG.
   if (rng() >= 0.18) return svg;
 
   const cx = Math.floor(rng() * 900 + 60);
@@ -169,14 +169,26 @@ function addRingedPlanet(svg, rng) {
   const rx = Math.floor(radius * (1.7 + rng() * 0.9));
   const ry = Math.floor(radius * (0.28 + rng() * 0.18));
   const rotation = Math.floor(rng() * 160 - 80);
+  const strokeWidth = Math.max(2, Math.floor(radius * 0.10));
+  const leftX = (cx - rx).toFixed(2);
+  const rightX = (cx + rx).toFixed(2);
+  const centerY = cy.toFixed(2);
 
-  // Draw the ring behind the planet, then the planet over it.
+  // Draw the complete ring behind the planet, then redraw its front half over
+  // the planet. In SVG's coordinate system, the sweep=1 arc is the lower/front
+  // half of the rotated ellipse.
+  const ringBack = `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none"
+               stroke="${ringColor}" stroke-width="${strokeWidth}"
+               opacity="${ringOpacity}" transform="rotate(${rotation} ${cx} ${cy})"/>`;
+  const ringFront = `<path d="M ${rightX} ${centerY} A ${rx} ${ry} ${rotation} 0 1 ${leftX} ${centerY}"
+               fill="none" stroke="${ringColor}" stroke-width="${strokeWidth}"
+               stroke-linecap="round" opacity="${ringOpacity}"/>`;
+
   const planet = `
     <g mask="url(#sunOcclusion)" opacity="${opacity}">
-      <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="none"
-               stroke="${ringColor}" stroke-width="${Math.max(2, Math.floor(radius * 0.10))}"
-               opacity="${ringOpacity}" transform="rotate(${rotation} ${cx} ${cy})"/>
+      ${ringBack}
       <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${planetColor}"/>
+      ${ringFront}
     </g>`;
 
   return svg.replace('</svg>', `${planet}</svg>`);
@@ -226,8 +238,22 @@ function generate() {
       }
     }
 
-    // Add the first experimental celestial body after the existing sun/mountain
-    // processing. The moon uses the same occlusion mask as the suns.
+    // Keep all celestial bodies in the same top-level rendering layer. The
+    // original suns are generated before the translucent mountain rectangles,
+    // so move those already-masked circles to the end of the SVG. They still
+    // use the exact mountain occlusion mask, but their rendering order is now
+    // unambiguous: mountains first, celestial bodies second.
+    if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
+      const suns = currentSvg.match(/<circle mask="url\(#sunOcclusion\)"[^>]*\/>/g) || [];
+      if (suns.length) {
+        currentSvg = currentSvg.replace(/<circle mask="url\(#sunOcclusion\)"[^>]*\/>/g, '');
+        currentSvg = currentSvg.replace('</svg>', `${suns.join('')}</svg>`);
+      }
+    }
+
+    // Add the experimental celestial bodies after the mountain layers and
+    // after the original suns have been moved into that same celestial layer.
+    // The moon and ringed planet use the same mountain occlusion mask.
     if ($('occlude').checked && currentSvg.includes('id="sunOcclusion"')) {
       currentSvg = addMoon(currentSvg, celestialRng);
       currentSvg = addRingedPlanet(currentSvg, planetRng);
